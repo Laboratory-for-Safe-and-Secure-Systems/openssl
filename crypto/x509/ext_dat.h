@@ -49,3 +49,6 @@ extern const X509V3_EXT_METHOD ossl_v3_time_specification;
 extern const X509V3_EXT_METHOD ossl_v3_attribute_mappings;
 extern const X509V3_EXT_METHOD ossl_v3_allowed_attribute_assignments;
 extern const X509V3_EXT_METHOD ossl_v3_aa_issuing_dist_point;
+extern const X509V3_EXT_METHOD ossl_v3_alt_pub_key;
+extern const X509V3_EXT_METHOD ossl_v3_alt_sig_alg;
+extern const X509V3_EXT_METHOD ossl_v3_alt_sig_val;

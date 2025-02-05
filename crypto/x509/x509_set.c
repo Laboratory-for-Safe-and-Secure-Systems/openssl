@@ -175,7 +175,7 @@ void X509_get0_uids(const X509 *x, const ASN1_BIT_STRING **piuid,
 
 const X509_ALGOR *X509_get0_tbs_sigalg(const X509 *x)
 {
-    return &x->cert_info.signature;
+    return x->cert_info.signature;
 }
 
 int X509_SIG_INFO_get(const X509_SIG_INFO *siginf, int *mdnid, int *pknid,

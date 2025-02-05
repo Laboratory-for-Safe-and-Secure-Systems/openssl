@@ -5924,3 +5924,6 @@ OSSL_AA_DIST_POINT_free                 ?	3_5_0	EXIST::FUNCTION:
 OSSL_AA_DIST_POINT_new                  ?	3_5_0	EXIST::FUNCTION:
 OSSL_AA_DIST_POINT_it                   ?	3_5_0	EXIST::FUNCTION:
 PEM_ASN1_write_bio_ctx                  ?	3_5_0	EXIST::FUNCTION:
+X509_get_alt_pub_key                    ?	3_4_1	EXIST::FUNCTION:
+X509_alt_sig_sign                       ?	3_4_1	EXIST::FUNCTION:
+X509_alt_sig_validate_path              ?	3_4_1	EXIST::FUNCTION:

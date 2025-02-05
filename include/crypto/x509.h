@@ -160,7 +160,7 @@ struct x509_cert_aux_st {
 struct x509_cinf_st {
     ASN1_INTEGER *version;      /* [ 0 ] default of v1 */
     ASN1_INTEGER serialNumber;
-    X509_ALGOR signature;
+    X509_ALGOR *signature;
     X509_NAME *issuer;
     X509_VAL validity;
     X509_NAME *subject;
@@ -205,6 +205,8 @@ struct x509_st {
 
     OSSL_LIB_CTX *libctx;
     char *propq;
+
+    EVP_PKEY *hybrid_sig_private_key;
 } /* X509 */ ;
 
 /*
@@ -387,7 +389,7 @@ STACK_OF(X509_ATTRIBUTE) *ossl_x509at_add1_attr_by_txt(STACK_OF(X509_ATTRIBUTE) 
                                                        int type,
                                                        const unsigned char *bytes,
                                                        int len);
-                                            
+
 int ossl_print_attribute_value(BIO *out,
                                int obj_nid,
                                const ASN1_TYPE *av,
