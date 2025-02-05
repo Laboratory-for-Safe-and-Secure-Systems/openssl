@@ -14,6 +14,8 @@
 /configdata.pm
 /builddata.pm
 /installdata.pm
+/.vscode
+/build
 
 # Exporters
 /*.pc
