@@ -42,3 +42,6 @@ extern const X509V3_EXT_METHOD ossl_v3_user_notice;
 extern const X509V3_EXT_METHOD ossl_v3_battcons;
 extern const X509V3_EXT_METHOD ossl_v3_audit_identity;
 extern const X509V3_EXT_METHOD ossl_v3_issued_on_behalf_of;
+extern const X509V3_EXT_METHOD ossl_v3_alt_pub_key;
+extern const X509V3_EXT_METHOD ossl_v3_alt_sig_alg;
+extern const X509V3_EXT_METHOD ossl_v3_alt_sig_val;

@@ -373,7 +373,7 @@ static int check_sig_alg_match(const EVP_PKEY *issuer_key, const X509 *subject)
 
     if (issuer_key == NULL)
         return X509_V_ERR_NO_ISSUER_PUBLIC_KEY;
-    if (OBJ_find_sigid_algs(OBJ_obj2nid(subject->cert_info.signature.algorithm),
+    if (OBJ_find_sigid_algs(OBJ_obj2nid(subject->cert_info.signature->algorithm),
                             NULL, &subj_sig_nid) == 0)
         return X509_V_ERR_UNSUPPORTED_SIGNATURE_ALGORITHM;
     if (EVP_PKEY_is_a(issuer_key, OBJ_nid2sn(subj_sig_nid))

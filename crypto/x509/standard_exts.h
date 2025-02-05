@@ -88,6 +88,9 @@ static const X509V3_EXT_METHOD *standard_exts[] = {
     &ossl_v3_single_use,
     &ossl_v3_group_ac,
     &ossl_v3_holder_name_constraints,
+    &ossl_v3_alt_pub_key,
+    &ossl_v3_alt_sig_alg,
+    &ossl_v3_alt_sig_val,
     &ossl_v3_associated_info,
 };
 

@@ -32,7 +32,7 @@
 
 int X509_verify(X509 *a, EVP_PKEY *r)
 {
-    if (X509_ALGOR_cmp(&a->sig_alg, &a->cert_info.signature) != 0)
+    if (X509_ALGOR_cmp(&a->sig_alg, a->cert_info.signature) != 0)
         return 0;
 
     return ASN1_item_verify_ex(ASN1_ITEM_rptr(X509_CINF), &a->sig_alg,
@@ -92,7 +92,7 @@ int X509_sign(X509 *x, EVP_PKEY *pkey, const EVP_MD *md)
      * which exist below are the same.
      */
     x->cert_info.enc.modified = 1;
-    return ASN1_item_sign_ex(ASN1_ITEM_rptr(X509_CINF), &x->cert_info.signature,
+    return ASN1_item_sign_ex(ASN1_ITEM_rptr(X509_CINF), x->cert_info.signature,
                              &x->sig_alg, &x->signature, &x->cert_info, NULL,
                              pkey, md, x->libctx, x->propq);
 }
@@ -107,8 +107,18 @@ int X509_sign_ctx(X509 *x, EVP_MD_CTX *ctx)
             && !X509_set_version(x, X509_VERSION_3))
         return 0;
     x->cert_info.enc.modified = 1;
+
+    EVP_MD_CTX* ctxCpy = EVP_MD_CTX_create();
+    EVP_MD_CTX_copy(ctxCpy, ctx);
+
+    if (X509_alt_sig_sign(x, ctxCpy) <= 0) {
+        EVP_MD_CTX_free(ctxCpy);
+        return 0;
+    }
+    EVP_MD_CTX_free(ctxCpy);
+
     return ASN1_item_sign_ctx(ASN1_ITEM_rptr(X509_CINF),
-                              &x->cert_info.signature,
+                              x->cert_info.signature,
                               &x->sig_alg, &x->signature, &x->cert_info, ctx);
 }
 
