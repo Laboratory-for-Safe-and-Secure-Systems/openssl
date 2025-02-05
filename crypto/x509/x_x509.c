@@ -18,7 +18,7 @@
 ASN1_SEQUENCE_enc(X509_CINF, enc, 0) = {
         ASN1_EXP_OPT(X509_CINF, version, ASN1_INTEGER, 0),
         ASN1_EMBED(X509_CINF, serialNumber, ASN1_INTEGER),
-        ASN1_EMBED(X509_CINF, signature, X509_ALGOR),
+        ASN1_SIMPLE(X509_CINF, signature, X509_ALGOR),
         ASN1_SIMPLE(X509_CINF, issuer, X509_NAME),
         ASN1_EMBED(X509_CINF, validity, X509_VAL),
         ASN1_SIMPLE(X509_CINF, subject, X509_NAME),
