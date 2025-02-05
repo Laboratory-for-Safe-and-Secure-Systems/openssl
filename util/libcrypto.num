@@ -5734,3 +5734,6 @@ EVP_CIPHER_CTX_get_algor                5861	3_4_0	EXIST::FUNCTION:
 EVP_PKEY_CTX_set_algor_params           5862	3_4_0	EXIST::FUNCTION:
 EVP_PKEY_CTX_get_algor_params           5863	3_4_0	EXIST::FUNCTION:
 EVP_PKEY_CTX_get_algor                  5864	3_4_0	EXIST::FUNCTION:
+X509_get_alt_pub_key                    ?	3_4_1	EXIST::FUNCTION:
+X509_alt_sig_sign                       ?	3_4_1	EXIST::FUNCTION:
+X509_alt_sig_validate_path              ?	3_4_1	EXIST::FUNCTION:

@@ -265,6 +265,10 @@ static int verify_chain(X509_STORE_CTX *ctx)
         return ok;
 #endif
 
+    /* Verify hybrid signatures */
+    if ((ok = X509_alt_sig_validate_path(ctx)) == 0)
+        return ok;
+
     /* If we get this far evaluate policies */
     if ((ctx->param->flags & X509_V_FLAG_POLICY_CHECK) != 0)
         ok = ctx->check_policy(ctx);
@@ -617,7 +621,7 @@ static int check_extensions(X509_STORE_CTX *ctx)
                            && sk_GENERAL_NAME_num(x->altname) <= 0,
                        ctx, x, i, X509_V_ERR_EMPTY_SUBJECT_ALT_NAME);
             /* Check sig alg consistency acc. to RFC 5280 section 4.1.1.2 */
-            CB_FAIL_IF(X509_ALGOR_cmp(&x->sig_alg, &x->cert_info.signature) != 0,
+            CB_FAIL_IF(X509_ALGOR_cmp(&x->sig_alg, x->cert_info.signature) != 0,
                        ctx, x, i, X509_V_ERR_SIGNATURE_ALGORITHM_INCONSISTENCY);
             CB_FAIL_IF(x->akid != NULL
                            && (x->ex_flags & EXFLAG_AKID_CRITICAL) != 0,

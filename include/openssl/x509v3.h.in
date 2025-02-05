@@ -1037,6 +1037,9 @@ DECLARE_ASN1_FUNCTIONS(OSSL_USER_NOTICE_SYNTAX)
     generate_stack_macros("USERNOTICE");
 -}
 
+int X509_alt_sig_sign(X509 *x, EVP_MD_CTX *ctx);
+int X509_alt_sig_validate_path(X509_STORE_CTX *ctx);
+
 # ifdef  __cplusplus
 }
 # endif
