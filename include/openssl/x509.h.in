@@ -695,6 +695,7 @@ const X509_ALGOR *X509_get0_tbs_sigalg(const X509 *x);
 EVP_PKEY *X509_get0_pubkey(const X509 *x);
 EVP_PKEY *X509_get_pubkey(X509 *x);
 ASN1_BIT_STRING *X509_get0_pubkey_bitstr(const X509 *x);
+EVP_PKEY* X509_get_alt_pub_key(const X509 *x);
 
 #define X509_REQ_VERSION_1 0
 
