@@ -34,6 +34,7 @@ static int init_alpn(SSL_CONNECTION *s, unsigned int context);
 static int final_alpn(SSL_CONNECTION *s, unsigned int context, int sent);
 static int init_sig_algs_cert(SSL_CONNECTION *s, unsigned int context);
 static int init_sig_algs(SSL_CONNECTION *s, unsigned int context);
+static int init_hybrid_sig_algs(SSL_CONNECTION *s, unsigned int context);
 static int init_server_cert_type(SSL_CONNECTION *sc, unsigned int context);
 static int init_client_cert_type(SSL_CONNECTION *sc, unsigned int context);
 static int init_certificate_authorities(SSL_CONNECTION *s,
@@ -59,6 +60,7 @@ static int final_key_share(SSL_CONNECTION *s, unsigned int context, int sent);
 static int init_srtp(SSL_CONNECTION *s, unsigned int context);
 #endif
 static int final_sig_algs(SSL_CONNECTION *s, unsigned int context, int sent);
+static int final_hybrid_sig_algs(SSL_CONNECTION *s, unsigned int context, int sent);
 static int final_supported_versions(SSL_CONNECTION *s, unsigned int context,
                                     int sent);
 static int final_early_data(SSL_CONNECTION *s, unsigned int context, int sent);
@@ -337,6 +339,13 @@ static const EXTENSION_DEFINITION ext_defs[] = {
         init_sig_algs, tls_parse_ctos_sig_algs,
         tls_parse_ctos_sig_algs, tls_construct_ctos_sig_algs,
         tls_construct_ctos_sig_algs, final_sig_algs
+    },
+    {
+        TLSEXT_TYPE_hybrid_signature_algorithms,
+        SSL_EXT_CLIENT_HELLO | SSL_EXT_TLS1_3_CERTIFICATE_REQUEST,
+        init_hybrid_sig_algs, tls_parse_ctos_hybrid_sig_algs,
+        tls_parse_ctos_hybrid_sig_algs, tls_construct_ctos_hybrid_sig_algs,
+        tls_construct_ctos_hybrid_sig_algs, final_hybrid_sig_algs
     },
     {
         TLSEXT_TYPE_supported_versions,
@@ -1205,6 +1214,16 @@ static int init_sig_algs(SSL_CONNECTION *s, unsigned int context)
     return 1;
 }
 
+static int init_hybrid_sig_algs(SSL_CONNECTION *s, unsigned int context)
+{
+    /* Clear any signature algorithms extension received */
+    // OPENSSL_free(s->s3.tmp.peer_sigalgs);
+    // s->s3.tmp.peer_sigalgs = NULL;
+    // s->s3.tmp.peer_sigalgslen = 0;
+
+    return 1;
+}
+
 static int init_sig_algs_cert(SSL_CONNECTION *s,
                               ossl_unused unsigned int context)
 {
@@ -1345,6 +1364,17 @@ static int final_sig_algs(SSL_CONNECTION *s, unsigned int context, int sent)
                  SSL_R_MISSING_SIGALGS_EXTENSION);
         return 0;
     }
+
+    return 1;
+}
+
+static int final_hybrid_sig_algs(SSL_CONNECTION *s, unsigned int context, int sent)
+{
+    // if (!sent && SSL_CONNECTION_IS_TLS13(s) && !s->hit) {
+    //     SSLfatal(s, TLS13_AD_MISSING_EXTENSION,
+    //              SSL_R_MISSING_SIGALGS_EXTENSION);
+    //     return 0;
+    // }
 
     return 1;
 }

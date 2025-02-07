@@ -168,6 +168,9 @@ extern "C" {
 #  define TLSEXT_TYPE_next_proto_neg              13172
 # endif
 
+/* Hybrid signature algorithms */
+# define TLSEXT_TYPE_hybrid_signature_algorithms 0xff92
+
 /* NameType value from RFC3546 */
 # define TLSEXT_NAMETYPE_host_name 0
 /* status request value from RFC3546 */
