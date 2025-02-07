@@ -693,6 +693,7 @@ typedef enum tlsext_index_en {
     TLSEXT_IDX_client_cert_type,
     TLSEXT_IDX_server_cert_type,
     TLSEXT_IDX_signature_algorithms,
+    TLSEXT_IDX_hybrid_signature_algorithms,
     TLSEXT_IDX_supported_versions,
     TLSEXT_IDX_psk_kex_modes,
     TLSEXT_IDX_key_share,
@@ -2875,6 +2876,9 @@ __owur size_t tls12_get_psigalgs(SSL_CONNECTION *s, int sent,
                                  const uint16_t **psigs);
 __owur int tls_check_sigalg_curve(const SSL_CONNECTION *s, int curve);
 __owur int tls12_check_peer_sigalg(SSL_CONNECTION *s, uint16_t, EVP_PKEY *pkey);
+__owur int tls13_sigalg_is_hybrid(uint16_t sigalg);
+__owur int tls13_key_is_hybrid(EVP_PKEY *pkey);
+__owur int tls13_create_hybrid_public_key(SSL_CONNECTION *s, EVP_PKEY **pkey, uint16_t sigalg);
 __owur int ssl_set_client_disabled(SSL_CONNECTION *s);
 __owur int ssl_cipher_disabled(const SSL_CONNECTION *s, const SSL_CIPHER *c,
                                int op, int echde);

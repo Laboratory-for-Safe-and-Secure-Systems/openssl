@@ -308,6 +308,9 @@ int tls_parse_ctos_sig_algs_cert(SSL_CONNECTION *s, PACKET *pkt,
                                  X509 *x, size_t chainidx);
 int tls_parse_ctos_sig_algs(SSL_CONNECTION *s, PACKET *pkt,
                             unsigned int context, X509 *x, size_t chainidx);
+int tls_parse_ctos_hybrid_sig_algs(SSL_CONNECTION *s, PACKET *pkt,
+                                   unsigned int context, X509 *x,
+                                   size_t chainidx);
 #ifndef OPENSSL_NO_OCSP
 int tls_parse_ctos_status_request(SSL_CONNECTION *s, PACKET *pkt,
                                   unsigned int context,
@@ -437,6 +440,9 @@ EXT_RETURN tls_construct_ctos_session_ticket(SSL_CONNECTION *s, WPACKET *pkt,
 EXT_RETURN tls_construct_ctos_sig_algs(SSL_CONNECTION *s, WPACKET *pkt,
                                        unsigned int context, X509 *x,
                                        size_t chainidx);
+EXT_RETURN tls_construct_ctos_hybrid_sig_algs(SSL_CONNECTION *s, WPACKET *pkt,
+                                              unsigned int context, X509 *x,
+                                              size_t chainidx);
 #ifndef OPENSSL_NO_OCSP
 EXT_RETURN tls_construct_ctos_status_request(SSL_CONNECTION *s, WPACKET *pkt,
                                              unsigned int context, X509 *x,
