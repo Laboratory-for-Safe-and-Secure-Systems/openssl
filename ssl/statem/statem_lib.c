@@ -449,6 +449,7 @@ MSG_PROCESS_RETURN tls_process_cert_verify(SSL_CONNECTION *s, PACKET *pkt)
     EVP_MD_CTX *mctx = EVP_MD_CTX_new();
     EVP_PKEY_CTX *pctx = NULL;
     SSL_CTX *sctx = SSL_CONNECTION_GET_CTX(s);
+    int pkey_updated = 0;
 
     if (mctx == NULL) {
         SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_EVP_LIB);
@@ -473,6 +474,13 @@ MSG_PROCESS_RETURN tls_process_cert_verify(SSL_CONNECTION *s, PACKET *pkt)
         if (!PACKET_get_net_2(pkt, &sigalg)) {
             SSLfatal(s, SSL_AD_DECODE_ERROR, SSL_R_BAD_PACKET);
             goto err;
+        }
+        if (tls13_sigalg_is_hybrid(sigalg) && !tls13_key_is_hybrid(pkey)) {
+            if (!tls13_create_hybrid_public_key(s, &pkey, sigalg)) {
+                SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
+                goto err;
+            }
+            pkey_updated = 1;
         }
         if (tls12_check_peer_sigalg(s, sigalg, pkey) <= 0) {
             /* SSLfatal() already called */
@@ -603,6 +611,9 @@ MSG_PROCESS_RETURN tls_process_cert_verify(SSL_CONNECTION *s, PACKET *pkt)
 #ifndef OPENSSL_NO_GOST
     OPENSSL_free(gost_data);
 #endif
+    if (pkey_updated)
+        EVP_PKEY_free(pkey);
+
     return ret;
 }
 

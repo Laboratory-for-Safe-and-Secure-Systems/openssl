@@ -347,6 +347,49 @@ EXT_RETURN tls_construct_ctos_sig_algs(SSL_CONNECTION *s, WPACKET *pkt,
     return EXT_RETURN_SENT;
 }
 
+EXT_RETURN tls_construct_ctos_hybrid_sig_algs(SSL_CONNECTION *s, WPACKET *pkt,
+                                              unsigned int context, X509 *x,
+                                              size_t chainidx)
+{
+    size_t i;
+
+    size_t salglen;
+    const uint16_t *salg;
+
+    size_t hybrid_salglen = 0;
+    uint16_t hybrid_salg[8];
+
+    if (!SSL_CLIENT_USE_SIGALGS(s))
+        return EXT_RETURN_NOT_SENT;
+
+    /* Get the normal signature algorithms, as these also contain the hybrid ones */
+    salglen = tls12_get_psigalgs(s, 1, &salg);
+
+    /* Filter the hybrid ones */
+    for (i = 0; i < salglen; i++, salg++) {
+        if (tls13_sigalg_is_hybrid(*salg) &&
+                (hybrid_salglen < OSSL_NELEM(hybrid_salg))) {
+            hybrid_salg[hybrid_salglen] = *salg;
+            hybrid_salglen++;
+        }
+    }
+
+    /* Construct the extension */
+    if (!WPACKET_put_bytes_u16(pkt, TLSEXT_TYPE_hybrid_signature_algorithms)
+               /* Sub-packet for sig-algs extension */
+            || !WPACKET_start_sub_packet_u16(pkt)
+               /* Sub-packet for the actual list */
+            || !WPACKET_start_sub_packet_u16(pkt)
+            || !tls12_copy_sigalgs(s, pkt, hybrid_salg, hybrid_salglen)
+            || !WPACKET_close(pkt)
+            || !WPACKET_close(pkt)) {
+        SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
+        return EXT_RETURN_FAIL;
+    }
+
+    return EXT_RETURN_SENT;
+}
+
 #ifndef OPENSSL_NO_OCSP
 EXT_RETURN tls_construct_ctos_status_request(SSL_CONNECTION *s, WPACKET *pkt,
                                              unsigned int context, X509 *x,

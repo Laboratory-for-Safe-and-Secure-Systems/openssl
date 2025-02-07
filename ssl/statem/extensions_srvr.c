@@ -315,6 +315,27 @@ int tls_parse_ctos_sig_algs(SSL_CONNECTION *s, PACKET *pkt,
     return 1;
 }
 
+int tls_parse_ctos_hybrid_sig_algs(SSL_CONNECTION *s, PACKET *pkt,
+                                   unsigned int context, X509 *x,
+                                   size_t chainidx)
+{
+    // PACKET supported_sig_algs;
+
+    // if (!PACKET_as_length_prefixed_2(pkt, &supported_sig_algs)
+    //         || PACKET_remaining(&supported_sig_algs) == 0) {
+    //     SSLfatal(s, SSL_AD_DECODE_ERROR, SSL_R_BAD_EXTENSION);
+    //     return 0;
+    // }
+
+    // if (!s->hit && !tls1_save_sigalgs(s, &supported_sig_algs, 0)) {
+    //     SSLfatal(s, SSL_AD_DECODE_ERROR, SSL_R_BAD_EXTENSION);
+    //     return 0;
+    // }
+
+    return 1;
+}
+
+
 #ifndef OPENSSL_NO_OCSP
 int tls_parse_ctos_status_request(SSL_CONNECTION *s, PACKET *pkt,
                                   unsigned int context,
