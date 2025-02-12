@@ -2225,6 +2225,10 @@ OSSL_LIB_CTX *EVP_PKEY_CTX_get0_libctx(EVP_PKEY_CTX *ctx);
 const char *EVP_PKEY_CTX_get0_propq(const EVP_PKEY_CTX *ctx);
 const OSSL_PROVIDER *EVP_PKEY_CTX_get0_provider(const EVP_PKEY_CTX *ctx);
 
+int EVP_PKEY_combine_public_keys(EVP_PKEY **hybrid_key, const EVP_PKEY *key,
+                                 const EVP_PKEY *alt_key);
+int EVP_PKEY_combine_private_keys(EVP_PKEY **hybrid_key, const EVP_PKEY *key,
+                                  const EVP_PKEY *alt_key);
 # ifdef  __cplusplus
 }
 # endif

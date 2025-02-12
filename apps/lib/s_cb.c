@@ -152,7 +152,7 @@ int set_cert_stuff(SSL_CTX *ctx, char *cert_file, char *key_file)
 }
 
 int set_cert_key_stuff(SSL_CTX *ctx, X509 *cert, EVP_PKEY *key,
-                       STACK_OF(X509) *chain, int build_chain)
+                       STACK_OF(X509) *chain, int build_chain, EVP_PKEY *alt_key)
 {
     int chflags = chain ? SSL_BUILD_CHAIN_FLAG_CHECK : 0;
 
@@ -188,6 +188,64 @@ int set_cert_key_stuff(SSL_CTX *ctx, X509 *cert, EVP_PKEY *key,
         ERR_print_errors(bio_err);
         return 0;
     }
+
+    if (alt_key != NULL) {
+        if (SSL_CTX_use_PrivateKey(ctx, alt_key) <= 0) {
+            BIO_printf(bio_err, "error setting alternative private key\n");
+            ERR_print_errors(bio_err);
+            return 0;
+        }
+
+        if (!SSL_CTX_check_private_key(ctx)) {
+            BIO_printf(bio_err,
+                       "Alt private key does not match the certificate alt public key\n");
+            return 0;
+        }
+        if (chain && !SSL_CTX_set1_chain(ctx, chain)) {
+            BIO_printf(bio_err, "error setting certificate chain\n");
+            ERR_print_errors(bio_err);
+            return 0;
+        }
+        if (build_chain && !SSL_CTX_build_cert_chain(ctx, chflags)) {
+            BIO_printf(bio_err, "error building certificate chain\n");
+            ERR_print_errors(bio_err);
+            return 0;
+        }
+
+        /* Create the combined hybrid private key */
+        EVP_PKEY *hybrid_key = NULL;
+        if (!EVP_PKEY_combine_private_keys(&hybrid_key, key, alt_key)) {
+            BIO_printf(bio_err, "error combining private keys\n");
+            ERR_print_errors(bio_err);
+            return 0;
+        }
+
+        if (SSL_CTX_use_PrivateKey(ctx, hybrid_key) <= 0) {
+            BIO_printf(bio_err, "error setting hybrid private key\n");
+            ERR_print_errors(bio_err);
+            EVP_PKEY_free(hybrid_key);
+            return 0;
+        }
+
+        EVP_PKEY_free(hybrid_key);
+
+        if (!SSL_CTX_check_private_key(ctx)) {
+            BIO_printf(bio_err,
+                       "Hybrid private key does not match the certificate public keys\n");
+            return 0;
+        }
+        if (chain && !SSL_CTX_set1_chain(ctx, chain)) {
+            BIO_printf(bio_err, "error setting certificate chain\n");
+            ERR_print_errors(bio_err);
+            return 0;
+        }
+        if (build_chain && !SSL_CTX_build_cert_chain(ctx, chflags)) {
+            BIO_printf(bio_err, "error building certificate chain\n");
+            ERR_print_errors(bio_err);
+            return 0;
+        }
+    }
+
     return 1;
 }
 

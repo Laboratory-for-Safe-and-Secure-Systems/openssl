@@ -25,6 +25,7 @@
 #include "internal/tlsgroups.h"
 #include "ssl_local.h"
 #include "quic/quic_local.h"
+#include "crypto/evp.h"
 #include <openssl/ct.h>
 
 static const SIGALG_LOOKUP *find_sig_alg(SSL_CONNECTION *s, X509 *x, EVP_PKEY *pkey);
@@ -2089,113 +2090,7 @@ int tls13_sigalg_is_hybrid(uint16_t sigalg)
         case 0xfedb: /* falcon1024 hybrid with p521 */
             ret = 1;
             break;
-        default:
-            break;
-    }
-    return ret;
-}
-
-int get_public_key(const EVP_PKEY *key, uint8_t **buf, size_t *buf_len)
-{
-    *buf = NULL;
-    *buf_len = 0;
-    int ret = 0;
-
-    if (EVP_PKEY_get_base_id(key) == EVP_PKEY_RSA) {
-        *buf_len = i2d_PublicKey(key, buf);
-        if (*buf_len > 0 && *buf != NULL) {
-            ret = 1;
         }
-    }
-    else {
-        if (EVP_PKEY_get_octet_string_param(key, OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, buf_len) != 1) {
-            goto out;
-        }
-        if (!(*buf = OPENSSL_malloc(*buf_len))) {
-            goto out;
-        }
-        if (EVP_PKEY_get_octet_string_param(key, OSSL_PKEY_PARAM_PUB_KEY, *buf, *buf_len, buf_len) != 1) {
-            free(*buf);
-            *buf = NULL;
-        }
-        else
-            ret = 1;
-    }
-
-out:
-    return ret;
-}
-
-int combine_public_keys(SSL_CONNECTION *s, EVP_PKEY **hybrid_key, char const *hybrid_name,
-                        EVP_PKEY *classic_key, EVP_PKEY *pqc_key)
-{
-    int ret = 0;
-    unsigned char *classic_pub = NULL;
-    size_t classic_len = 0;
-    unsigned char *pqc_pub = NULL;
-    size_t pqc_len = 0;
-    unsigned char* hybrid_pub = NULL;
-    size_t hybrid_len = 0;
-    EVP_PKEY_CTX* hybrid_ctx = NULL;
-    OSSL_PARAM params[2];
-
-    /* Get raw public keys */
-    if (!get_public_key(classic_key, &classic_pub, &classic_len)) {
-        SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_R_MISSING_PARAMETERS);
-        goto out;
-    }
-    if (!get_public_key(pqc_key, &pqc_pub, &pqc_len)) {
-        SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_R_MISSING_PARAMETERS);
-        goto out;
-    }
-
-    /* Combine the public keys */
-    hybrid_len = classic_len + pqc_len + sizeof(uint32_t);
-    hybrid_pub = OPENSSL_malloc(hybrid_len);
-    if (hybrid_pub == NULL) {
-        SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_MALLOC_FAILURE);
-        goto out;
-    }
-    uint32_t classic_pub_len_n = htonl(classic_len);
-    memcpy(hybrid_pub, &classic_pub_len_n, sizeof(classic_pub_len_n));
-    memcpy(hybrid_pub + sizeof(uint32_t), classic_pub, classic_len);
-    memcpy(hybrid_pub + classic_len + sizeof(uint32_t), pqc_pub, pqc_len);
-
-    /* Create the hybrid key from the combined raw public key */
-    hybrid_ctx = EVP_PKEY_CTX_new_from_name(SSL_CONNECTION_GET_CTX(s)->libctx, hybrid_name,
-                                            SSL_CONNECTION_GET_CTX(s)->propq);
-    if (hybrid_ctx == NULL) {
-        SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
-        goto out;
-    }
-    if (EVP_PKEY_fromdata_init(hybrid_ctx) <= 0) {
-        SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
-        goto out;
-    }
-
-    params[0] = OSSL_PARAM_construct_octet_string(OSSL_PKEY_PARAM_PUB_KEY, hybrid_pub, hybrid_len);
-    params[1] = OSSL_PARAM_construct_end();
-
-    if (EVP_PKEY_fromdata(hybrid_ctx, hybrid_key, EVP_PKEY_PUBLIC_KEY, params) <= 0) {
-        SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
-        goto out;
-    }
-
-    ret = 1;
-
-out:
-    if (classic_pub != NULL) {
-        OPENSSL_free(classic_pub);
-    }
-    if (pqc_pub != NULL) {
-        OPENSSL_free(pqc_pub);
-    }
-    if (hybrid_pub != NULL) {
-        OPENSSL_free(hybrid_pub);
-    }
-    if (hybrid_ctx != NULL) {
-        EVP_PKEY_CTX_free(hybrid_ctx);
-    }
 
     return ret;
 }
@@ -2206,8 +2101,6 @@ int tls13_create_hybrid_public_key(SSL_CONNECTION *s, EVP_PKEY **pkey, uint16_t 
     EVP_PKEY *key = *pkey;
     EVP_PKEY *alt_key = NULL;
     EVP_PKEY *hybrid_key = NULL;
-    int pqc_is_alt = 1;
-    char const *hybrid_name = NULL;
 
     /* Get alt key from certificate */
     alt_key = X509_get_alt_pub_key(s->session->peer);
@@ -2216,56 +2109,9 @@ int tls13_create_hybrid_public_key(SSL_CONNECTION *s, EVP_PKEY **pkey, uint16_t 
         goto out;
     }
 
-    /* Check which key is the alt key. */
-    switch (EVP_PKEY_get_base_id(alt_key)) {
-        case EVP_PKEY_RSA:
-        case EVP_PKEY_EC:
-        case EVP_PKEY_ED25519:
-        case EVP_PKEY_ED448:
-            pqc_is_alt = 0;
-            break;
-    }
-
-    /* Get hybrid NID */
-    switch (sigalg) {
-        case 0xff06:
-            hybrid_name = "p256_mldsa44";
-            break;
-        case 0xff07:
-            hybrid_name = "rsa3072_mldsa44";
-            break;
-        case 0xff08:
-            hybrid_name = "p384_mldsa65";
-            break;
-        case 0xff09:
-            hybrid_name = "p521_mldsa87";
-            break;
-        case 0xfed8:
-            hybrid_name = "p256_falcon512";
-            break;
-        case 0xfed9:
-            hybrid_name = "rsa3072_falcon512";
-            break;
-        case 0xfedb:
-            hybrid_name = "p521_falcon1024";
-            break;
-        default:
-            break;
-    }
-    if (hybrid_name == NID_undef) {
-        SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_R_MISSING_PARAMETERS);
-        goto out;
-    }
-
     /* Create the combined hybrid key */
-    if (pqc_is_alt) {
-        if (!combine_public_keys(s, &hybrid_key, hybrid_name, key, alt_key)) {
-            goto out;
-        }
-    } else {
-        if (!combine_public_keys(s, &hybrid_key, hybrid_name, alt_key, key)) {
-            goto out;
-        }
+    if (!EVP_PKEY_combine_public_keys(&hybrid_key, key, alt_key)) {
+        goto out;
     }
 
     *pkey = hybrid_key;
@@ -2975,12 +2821,15 @@ static size_t tls12_shared_sigalgs(SSL_CONNECTION *s,
 /* Set shared signature algorithms for SSL structures */
 static int tls1_set_shared_sigalgs(SSL_CONNECTION *s)
 {
+    int ret = 0;
     const uint16_t *pref, *allow, *conf;
-    size_t preflen, allowlen, conflen;
+    uint16_t *peer_list;
+    size_t preflen, allowlen, conflen, peer_listlen;
     size_t nmatch;
     const SIGALG_LOOKUP **salgs = NULL;
     CERT *c = s->cert;
     unsigned int is_suiteb = tls1_suiteb(s);
+    int peer_list_allocated = 0;
 
     OPENSSL_free(s->shared_sigalgs);
     s->shared_sigalgs = NULL;
@@ -2994,28 +2843,49 @@ static int tls1_set_shared_sigalgs(SSL_CONNECTION *s)
         conflen = c->conf_sigalgslen;
     } else
         conflen = tls12_get_psigalgs(s, 0, &conf);
+
+    if (s->s3.tmp.peer_hybrid_sigalgslen > 0) {
+        peer_listlen = s->s3.tmp.peer_hybrid_sigalgslen + s->s3.tmp.peer_sigalgslen;
+        if ((peer_list = OPENSSL_malloc(peer_listlen * sizeof(*peer_list))) == NULL)
+            goto out;
+        memcpy(peer_list, s->s3.tmp.peer_hybrid_sigalgs,
+               s->s3.tmp.peer_hybrid_sigalgslen * sizeof(*peer_list));
+        memcpy(peer_list + s->s3.tmp.peer_hybrid_sigalgslen, s->s3.tmp.peer_sigalgs,
+               s->s3.tmp.peer_sigalgslen * sizeof(*peer_list));
+        peer_list_allocated = 1;
+    }
+    else {
+        peer_list = s->s3.tmp.peer_sigalgs;
+        peer_listlen = s->s3.tmp.peer_sigalgslen;
+    }
+
     if (s->options & SSL_OP_CIPHER_SERVER_PREFERENCE || is_suiteb) {
         pref = conf;
         preflen = conflen;
-        allow = s->s3.tmp.peer_sigalgs;
-        allowlen = s->s3.tmp.peer_sigalgslen;
+        allow = peer_list;
+        allowlen = peer_listlen;
     } else {
         allow = conf;
         allowlen = conflen;
-        pref = s->s3.tmp.peer_sigalgs;
-        preflen = s->s3.tmp.peer_sigalgslen;
+        pref = peer_list;
+        preflen = peer_listlen;
     }
     nmatch = tls12_shared_sigalgs(s, NULL, pref, preflen, allow, allowlen);
     if (nmatch) {
         if ((salgs = OPENSSL_malloc(nmatch * sizeof(*salgs))) == NULL)
-            return 0;
+            goto out;
         nmatch = tls12_shared_sigalgs(s, salgs, pref, preflen, allow, allowlen);
     } else {
         salgs = NULL;
     }
     s->shared_sigalgs = salgs;
     s->shared_sigalgslen = nmatch;
-    return 1;
+    ret = 1;
+
+out:
+    if (peer_list_allocated && peer_list != NULL)
+        OPENSSL_free(peer_list);
+    return ret;
 }
 
 int tls1_save_u16(PACKET *pkt, uint16_t **pdest, size_t *pdestlen)

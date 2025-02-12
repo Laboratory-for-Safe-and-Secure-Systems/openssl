@@ -374,6 +374,10 @@ EXT_RETURN tls_construct_ctos_hybrid_sig_algs(SSL_CONNECTION *s, WPACKET *pkt,
         }
     }
 
+    /* Don't send the extension when we have no hybrid signature algorithms */
+    if (hybrid_salglen == 0)
+        return EXT_RETURN_NOT_SENT;
+
     /* Construct the extension */
     if (!WPACKET_put_bytes_u16(pkt, TLSEXT_TYPE_hybrid_signature_algorithms)
                /* Sub-packet for sig-algs extension */
