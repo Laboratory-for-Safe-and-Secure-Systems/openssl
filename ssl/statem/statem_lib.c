@@ -331,6 +331,9 @@ CON_FUNC_RETURN tls_construct_cert_verify(SSL_CONNECTION *s, WPACKET *pkt)
         goto err;
     }
 
+    /* ToDo: Check here if sigalg in `lu` is hybrid, but pkey is not hybrid. In this
+     * case, we have to combine the pkey and the alt key to a hybrid one. */
+
     mctx = EVP_MD_CTX_new();
     if (mctx == NULL) {
         SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_EVP_LIB);

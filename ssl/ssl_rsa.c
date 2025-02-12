@@ -16,6 +16,7 @@
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 #include <openssl/pem.h>
+#include "crypto/evp.h"
 
 static int ssl_set_cert(CERT *c, X509 *x509, SSL_CTX *ctx);
 static int ssl_set_pkey(CERT *c, EVP_PKEY *pkey, SSL_CTX *ctx);
@@ -242,16 +243,9 @@ int SSL_CTX_use_certificate(SSL_CTX *ctx, X509 *x)
     return ssl_set_cert(ctx->cert, x, ctx);
 }
 
-static int ssl_set_cert(CERT *c, X509 *x, SSL_CTX *ctx)
+static int ssl_set_cert_for_key(CERT *c, X509 *x, SSL_CTX *ctx, EVP_PKEY *pkey)
 {
-    EVP_PKEY *pkey;
     size_t i;
-
-    pkey = X509_get0_pubkey(x);
-    if (pkey == NULL) {
-        ERR_raise(ERR_LIB_SSL, SSL_R_X509_LIB);
-        return 0;
-    }
 
     if (ssl_cert_lookup_by_pkey(pkey, &i, ctx) == NULL) {
         ERR_raise(ERR_LIB_SSL, SSL_R_UNKNOWN_CERTIFICATE_TYPE);
@@ -291,6 +285,52 @@ static int ssl_set_cert(CERT *c, X509 *x, SSL_CTX *ctx)
     c->key = &(c->pkeys[i]);
 
     return 1;
+}
+
+static int ssl_set_cert(CERT *c, X509 *x, SSL_CTX *ctx)
+{
+    int ret = 0;
+
+    EVP_PKEY *pkey;
+    EVP_PKEY *alt_key = NULL;
+    EVP_PKEY *hybrid_key = NULL;
+
+    pkey = X509_get0_pubkey(x);
+    if (pkey == NULL) {
+        ERR_raise(ERR_LIB_SSL, SSL_R_X509_LIB);
+        return 0;
+    }
+
+    /* Add cert for primary key */
+    if (ssl_set_cert_for_key(c, x, ctx, pkey) == 0)
+        goto out;
+
+    /* Check if we have an alternative key*/
+    if ((alt_key = X509_get_alt_pub_key(x)) == NULL) {
+        ret = 1;
+        goto out;
+    }
+
+    /* Add cert for alt key */
+    if (ssl_set_cert_for_key(c, x, ctx, alt_key) == 0)
+        goto out;
+
+    /* Create the combined hybrid key */
+    if (!EVP_PKEY_combine_public_keys(&hybrid_key, pkey, alt_key)) {
+        goto out;
+    }
+
+    /* Add cert for hybrid key */
+    if (ssl_set_cert_for_key(c, x, ctx, hybrid_key) == 0)
+        goto out;
+
+    ret = 1;
+
+out:
+    EVP_PKEY_free(alt_key);
+    EVP_PKEY_free(hybrid_key);
+
+    return ret;
 }
 
 int SSL_CTX_use_certificate_file(SSL_CTX *ctx, const char *file, int type)

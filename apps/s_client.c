@@ -501,6 +501,7 @@ typedef enum OPTION_choice {
     OPT_MAXFRAGLEN, OPT_MAX_SEND_FRAG, OPT_SPLIT_SEND_FRAG, OPT_MAX_PIPELINES,
     OPT_READ_BUF, OPT_KEYLOG_FILE, OPT_EARLY_DATA, OPT_REQCAFILE,
     OPT_TFO,
+    OPT_ALT_KEY, OPT_ALT_KEYFORM,
     OPT_V_ENUM,
     OPT_X_ENUM,
     OPT_S_ENUM, OPT_IGNORE_UNEXPECTED_EOF,
@@ -572,6 +573,8 @@ const OPTIONS s_client_options[] = {
     {"build_chain", OPT_BUILD_CHAIN, '-', "Build client certificate chain"},
     {"key", OPT_KEY, 's', "Private key file to use; default: -cert file"},
     {"keyform", OPT_KEYFORM, 'E', "Key format (ENGINE, other values ignored)"},
+    {"altkey", OPT_ALT_KEY, 's',  "Alt private key file to use for cert"},
+    {"altkeyform", OPT_ALT_KEYFORM, 'f', "Alt key format (ENGINE, other values ignored)"},
     {"pass", OPT_PASS, 's', "Private key and cert file pass phrase source"},
     {"verify", OPT_VERIFY, 'p', "Turn on peer certificate verification"},
     {"nameopt", OPT_NAMEOPT, 's', "Certificate subject/issuer name printing options"},
@@ -958,6 +961,9 @@ int s_client_main(int argc, char **argv)
     int is_infinite;
     BIO_ADDR *peer_addr = NULL;
     struct user_data_st user_data;
+    const char *altkey_file = NULL;
+    EVP_PKEY *altkey = NULL;
+    int altkey_format = FORMAT_UNDEF;
 
     FD_ZERO(&readfds);
     FD_ZERO(&writefds);
@@ -1557,6 +1563,13 @@ int s_client_main(int argc, char **argv)
         case OPT_EARLY_DATA:
             early_data_file = opt_arg();
             break;
+        case OPT_ALT_KEY:
+            altkey_file = opt_arg();
+            break;
+        case OPT_ALT_KEYFORM:
+            if (!opt_format(opt_arg(), OPT_FMT_ANY, &altkey_format))
+                goto opthelp;
+            break;
         case OPT_ENABLE_PHA:
             enable_pha = 1;
             break;
@@ -1759,6 +1772,17 @@ int s_client_main(int argc, char **argv)
 
     if (chain_file != NULL) {
         if (!load_certs(chain_file, 0, &chain, pass, "client certificate chain"))
+            goto end;
+    }
+
+    if ((altkey = X509_get_alt_pub_key(cert)) != NULL) {
+        EVP_PKEY_free(altkey);
+
+        if (altkey_format == FORMAT_UNDEF)
+            altkey_format = key_format;
+
+        if ((altkey = load_key(altkey_file, altkey_format, 0, pass, e,
+                                 "client certificate alternative key")) == NULL)
             goto end;
     }
 
@@ -2029,7 +2053,7 @@ int s_client_main(int argc, char **argv)
 
     ssl_ctx_add_crls(ctx, crls, crl_download);
 
-    if (!set_cert_key_stuff(ctx, cert, key, chain, build_chain))
+    if (!set_cert_key_stuff(ctx, cert, key, chain, build_chain, altkey))
         goto end;
 
     if (!noservername) {
@@ -3356,6 +3380,7 @@ int s_client_main(int argc, char **argv)
     bio_c_out = NULL;
     BIO_free(bio_c_msg);
     bio_c_msg = NULL;
+    EVP_PKEY_free(altkey);
     return ret;
 }
 

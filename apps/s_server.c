@@ -741,6 +741,7 @@ typedef enum OPTION_choice {
     OPT_TFO, OPT_CERT_COMP,
     OPT_ENABLE_SERVER_RPK,
     OPT_ENABLE_CLIENT_RPK,
+    OPT_ALT_KEY, OPT_ALT_KEYFORM,
     OPT_R_ENUM,
     OPT_S_ENUM,
     OPT_V_ENUM,
@@ -806,6 +807,8 @@ const OPTIONS s_server_options[] = {
     {"key2", OPT_KEY2, '<',
      "-Private Key file to use for servername if not in -cert2"},
     {"keyform", OPT_KEYFORM, 'f', "Key format (ENGINE, other values ignored)"},
+    {"altkey", OPT_ALT_KEY, 's',  "Alt private key file to use for cert"},
+    {"altkeyform", OPT_ALT_KEYFORM, 'f', "Alt key format (ENGINE, other values ignored)"},
     {"pass", OPT_PASS, 's', "Private key and cert file pass phrase source"},
     {"dcert", OPT_DCERT, '<',
      "Second server certificate file to use (usually for DSA)"},
@@ -1092,6 +1095,9 @@ int s_server_main(int argc, char *argv[])
     int tfo = 0;
     int cert_comp = 0;
     int enable_server_rpk = 0;
+    const char *s_altkey_file = NULL;
+    EVP_PKEY *s_altkey = NULL;
+    int s_altkey_format = FORMAT_UNDEF;
 
     /* Init of few remaining global variables */
     local_argc = argc;
@@ -1704,6 +1710,13 @@ int s_server_main(int argc, char *argv[])
         case OPT_ENABLE_CLIENT_RPK:
             enable_client_rpk = 1;
             break;
+        case OPT_ALT_KEY:
+            s_altkey_file = opt_arg();
+            break;
+        case OPT_ALT_KEYFORM:
+            if (!opt_format(opt_arg(), OPT_FMT_ANY, &s_altkey_format))
+                goto opthelp;
+            break;
         }
     }
 
@@ -1816,6 +1829,17 @@ int s_server_main(int argc, char *argv[])
         if (s_chain_file != NULL) {
             if (!load_certs(s_chain_file, 0, &s_chain, NULL,
                             "server certificate chain"))
+                goto end;
+        }
+
+        if ((s_altkey = X509_get_alt_pub_key(s_cert)) != NULL) {
+            EVP_PKEY_free(s_altkey);
+
+            if (s_altkey_format == FORMAT_UNDEF)
+                s_altkey_format = s_key_format;
+
+            if ((s_altkey = load_key(s_altkey_file, s_altkey_format, 0, pass, engine,
+                                     "server certificate alternative key")) == NULL)
                 goto end;
         }
 
@@ -2171,7 +2195,7 @@ int s_server_main(int argc, char *argv[])
         EVP_PKEY_free(dhpkey);
     }
 
-    if (!set_cert_key_stuff(ctx, s_cert, s_key, s_chain, build_chain))
+    if (!set_cert_key_stuff(ctx, s_cert, s_key, s_chain, build_chain, s_altkey))
         goto end;
 
     if (s_serverinfo_file != NULL
@@ -2181,11 +2205,11 @@ int s_server_main(int argc, char *argv[])
     }
 
     if (ctx2 != NULL
-        && !set_cert_key_stuff(ctx2, s_cert2, s_key2, NULL, build_chain))
+        && !set_cert_key_stuff(ctx2, s_cert2, s_key2, NULL, build_chain, NULL))
         goto end;
 
     if (s_dcert != NULL) {
-        if (!set_cert_key_stuff(ctx, s_dcert, s_dkey, s_dchain, build_chain))
+        if (!set_cert_key_stuff(ctx, s_dcert, s_dkey, s_dchain, build_chain, NULL))
             goto end;
     }
 
@@ -2374,6 +2398,7 @@ int s_server_main(int argc, char *argv[])
 #ifdef CHARSET_EBCDIC
     BIO_meth_free(methods_ebcdic);
 #endif
+    EVP_PKEY_free(s_altkey);
     return ret;
 }
 

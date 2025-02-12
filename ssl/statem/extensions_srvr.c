@@ -319,18 +319,32 @@ int tls_parse_ctos_hybrid_sig_algs(SSL_CONNECTION *s, PACKET *pkt,
                                    unsigned int context, X509 *x,
                                    size_t chainidx)
 {
-    // PACKET supported_sig_algs;
+    PACKET supported_hybrid_sig_algs;
 
-    // if (!PACKET_as_length_prefixed_2(pkt, &supported_sig_algs)
-    //         || PACKET_remaining(&supported_sig_algs) == 0) {
-    //     SSLfatal(s, SSL_AD_DECODE_ERROR, SSL_R_BAD_EXTENSION);
-    //     return 0;
-    // }
+    if (!PACKET_as_length_prefixed_2(pkt, &supported_hybrid_sig_algs)
+            || PACKET_remaining(&supported_hybrid_sig_algs) == 0) {
+        SSLfatal(s, SSL_AD_DECODE_ERROR, SSL_R_BAD_EXTENSION);
+        return 0;
+    }
 
-    // if (!s->hit && !tls1_save_sigalgs(s, &supported_sig_algs, 0)) {
-    //     SSLfatal(s, SSL_AD_DECODE_ERROR, SSL_R_BAD_EXTENSION);
-    //     return 0;
-    // }
+    /* Extension ignored for inappropriate versions */
+    if (!SSL_USE_SIGALGS(s)) {
+        SSLfatal(s, SSL_AD_DECODE_ERROR, SSL_R_BAD_EXTENSION);
+        return 0;
+    }
+
+    /* Should never happen */
+    if (s->cert == NULL) {
+        SSLfatal(s, SSL_AD_DECODE_ERROR, SSL_R_BAD_EXTENSION);
+        return 0;
+    }
+
+    if (!tls1_save_u16(&supported_hybrid_sig_algs,
+                       &s->s3.tmp.peer_hybrid_sigalgs,
+                       &s->s3.tmp.peer_hybrid_sigalgslen)) {
+        SSLfatal(s, SSL_AD_DECODE_ERROR, SSL_R_BAD_EXTENSION);
+        return 0;
+    }
 
     return 1;
 }
