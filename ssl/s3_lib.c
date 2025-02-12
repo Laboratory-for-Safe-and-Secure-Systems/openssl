@@ -3422,6 +3422,7 @@ void ssl3_free(SSL *s)
     OPENSSL_clear_free(sc->s3.tmp.pms, sc->s3.tmp.pmslen);
     OPENSSL_free(sc->s3.tmp.peer_sigalgs);
     OPENSSL_free(sc->s3.tmp.peer_cert_sigalgs);
+    OPENSSL_free(sc->s3.tmp.peer_hybrid_sigalgs);
     OPENSSL_free(sc->s3.tmp.valid_flags);
     ssl3_free_digest_list(sc);
     OPENSSL_free(sc->s3.alpn_selected);
@@ -3452,6 +3453,7 @@ int ssl3_clear(SSL *s)
     OPENSSL_clear_free(sc->s3.tmp.pms, sc->s3.tmp.pmslen);
     OPENSSL_free(sc->s3.tmp.peer_sigalgs);
     OPENSSL_free(sc->s3.tmp.peer_cert_sigalgs);
+    OPENSSL_free(sc->s3.tmp.peer_hybrid_sigalgs);
     OPENSSL_free(sc->s3.tmp.valid_flags);
 
     EVP_PKEY_free(sc->s3.tmp.pkey);

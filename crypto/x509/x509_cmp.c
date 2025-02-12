@@ -14,6 +14,7 @@
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 #include <openssl/core_names.h>
+#include "crypto/evp.h"
 #include "crypto/x509.h"
 
 int X509_issuer_and_serial_cmp(const X509 *a, const X509 *b)
@@ -396,13 +397,39 @@ EVP_PKEY *X509_get_pubkey(X509 *x)
 
 int X509_check_private_key(const X509 *cert, const EVP_PKEY *pkey)
 {
+    int ret = 0;
     const EVP_PKEY *xk = X509_get0_pubkey(cert);
+    EVP_PKEY *alt_key = X509_get_alt_pub_key(cert);
+    EVP_PKEY *hybrid_key = NULL;
 
     if (xk == NULL) {
         ERR_raise(ERR_LIB_X509, X509_R_UNABLE_TO_GET_CERTS_PUBLIC_KEY);
         return 0;
     }
-    return ossl_x509_check_private_key(xk, pkey);
+
+    ret = ossl_x509_check_private_key(xk, pkey);
+    if ((ret == 1) || (ret == 0 && alt_key == NULL))
+        goto out;
+
+    /* We have an alt key, try that */
+    ret = ossl_x509_check_private_key(alt_key, pkey);
+
+    if (ret == 1)
+        goto out;
+
+    /* Create the combined hybrid key */
+    if (!EVP_PKEY_combine_public_keys(&hybrid_key, xk, alt_key)) {
+        goto out;
+    }
+
+    /* Try hybrid key */
+    ret = ossl_x509_check_private_key(hybrid_key, pkey);
+
+out:
+    EVP_PKEY_free(alt_key);
+    EVP_PKEY_free(hybrid_key);
+
+    return ret;
 }
 
 int ossl_x509_check_private_key(const EVP_PKEY *x, const EVP_PKEY *pkey)

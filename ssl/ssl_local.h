@@ -1362,9 +1362,11 @@ struct ssl_connection_st {
              */
             uint16_t *peer_sigalgs;
             uint16_t *peer_cert_sigalgs;
+            uint16_t *peer_hybrid_sigalgs;
             /* Size of above arrays */
             size_t peer_sigalgslen;
             size_t peer_cert_sigalgslen;
+            size_t peer_hybrid_sigalgslen;
             /* Sigalg peer actually uses */
             const struct sigalg_lookup_st *peer_sigalg;
             /*

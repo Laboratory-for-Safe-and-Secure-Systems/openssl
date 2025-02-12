@@ -2495,3 +2495,251 @@ int EVP_PKEY_get_field_type(const EVP_PKEY *pkey)
     return 0;
 }
 #endif
+
+typedef struct hybrid_mapping_st {
+    const char *hybrid_name;
+    int hybrid_type;
+    int classic_type;
+    int pqc_type;
+}
+HYBRID_MAPPING;
+
+static const HYBRID_MAPPING hybrid_combinations[] = {
+    {"p256_mldsa44", 1325, EVP_PKEY_EC, 1324},
+    {"rsa3072_mldsa44", 1326, EVP_PKEY_RSA, 1324},
+    {"p384_mldsa65", 1333, EVP_PKEY_EC, 1332},
+    {"p521_mldsa87", 1340, EVP_PKEY_EC, 1339},
+    {"p256_falcon512", 1345, EVP_PKEY_EC, 1344},
+    {"rsa3072_falcon512", 1346, EVP_PKEY_RSA, 1344},
+    {"p521_falcon1024", 1351, EVP_PKEY_EC, 1350},
+};
+
+static int get_raw_public_key(const EVP_PKEY *key, uint8_t **buf, size_t *buf_len)
+{
+    *buf = NULL;
+    *buf_len = 0;
+    int ret = 0;
+
+    if (EVP_PKEY_get_base_id(key) == EVP_PKEY_RSA) {
+        *buf_len = i2d_PublicKey(key, buf);
+        if (*buf_len > 0 && *buf != NULL) {
+            ret = 1;
+        }
+    }
+    else {
+        if (EVP_PKEY_get_octet_string_param(key, OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, buf_len) != 1) {
+            goto out;
+        }
+        if (!(*buf = OPENSSL_malloc(*buf_len))) {
+            goto out;
+        }
+        if (EVP_PKEY_get_octet_string_param(key, OSSL_PKEY_PARAM_PUB_KEY, *buf, *buf_len, buf_len) != 1) {
+            free(*buf);
+            *buf = NULL;
+        }
+        else
+            ret = 1;
+    }
+
+out:
+    return ret;
+}
+
+static int get_raw_private_key(const EVP_PKEY *key, uint8_t **buf, size_t *buf_len)
+{
+    *buf = NULL;
+    *buf_len = 0;
+    int ret = 0;
+    int key_type = EVP_PKEY_get_base_id(key);
+
+    if (key_type == EVP_PKEY_RSA || key_type == EVP_PKEY_EC) {
+        *buf_len = i2d_PrivateKey(key, buf);
+        if (*buf_len > 0 && *buf != NULL) {
+            ret = 1;
+        }
+    }
+    else {
+        if (EVP_PKEY_get_octet_string_param(key, OSSL_PKEY_PARAM_PRIV_KEY, NULL, 0, buf_len) != 1) {
+            goto out;
+        }
+        if (!(*buf = OPENSSL_malloc(*buf_len))) {
+            goto out;
+        }
+        if (EVP_PKEY_get_octet_string_param(key, OSSL_PKEY_PARAM_PRIV_KEY, *buf, *buf_len, buf_len) != 1) {
+            free(*buf);
+            *buf = NULL;
+        }
+        else
+            ret = 1;
+    }
+
+out:
+    return ret;
+}
+
+static int combine_keys(EVP_PKEY **hybrid_key, const EVP_PKEY *key, const EVP_PKEY *alt_key, int pub_keys)
+{
+    int ret = 0;
+    unsigned char *classic_raw = NULL;
+    size_t classic_len = 0;
+    unsigned char *pqc_raw = NULL;
+    size_t pqc_len = 0;
+    unsigned char* hybrid_raw = NULL;
+    size_t hybrid_len = 0;
+
+    int key_type = -1;
+    int alt_key_type = -1;
+    int pqc_is_alt = 1;
+
+    const EVP_PKEY *classic_key = NULL;
+    const EVP_PKEY *pqc_key = NULL;
+
+    char const* hybrid_name = NULL;
+
+    EVP_PKEY_CTX* hybrid_ctx = NULL;
+    OSSL_PARAM params[2];
+
+    key_type = EVP_PKEY_get_id(key);
+    if (key_type == EVP_PKEY_KEYMGMT) {
+        key_type = OBJ_sn2nid(EVP_PKEY_get0_type_name(key));
+    }
+
+    alt_key_type = EVP_PKEY_get_id(alt_key);
+    if (alt_key_type == EVP_PKEY_KEYMGMT) {
+        alt_key_type = OBJ_sn2nid(EVP_PKEY_get0_type_name(alt_key));
+    }
+
+    /* Check which key is the alt key. */
+    switch (alt_key_type) {
+        case EVP_PKEY_RSA:
+        case EVP_PKEY_EC:
+        case EVP_PKEY_ED25519:
+        case EVP_PKEY_ED448:
+            pqc_is_alt = 0;
+            break;
+    }
+
+    if (pqc_is_alt) {
+        classic_key = key;
+        pqc_key = alt_key;
+
+        for (int i = 0; i < OSSL_NELEM(hybrid_combinations); i++) {
+            if (hybrid_combinations[i].classic_type == key_type &&
+                hybrid_combinations[i].pqc_type == alt_key_type) {
+                hybrid_name = hybrid_combinations[i].hybrid_name;
+                break;
+            }
+        }
+    }
+    else {
+        classic_key = alt_key;
+        pqc_key = key;
+
+        for (int i = 0; i < OSSL_NELEM(hybrid_combinations); i++) {
+            if (hybrid_combinations[i].pqc_type == key_type &&
+                hybrid_combinations[i].classic_type == alt_key_type) {
+                hybrid_name = hybrid_combinations[i].hybrid_name;
+                break;
+            }
+        }
+    }
+
+    if (hybrid_name == NULL) {
+        goto out;
+    }
+
+    /* Get raw keys */
+    if (pub_keys) {
+        if (!get_raw_public_key(classic_key, &classic_raw, &classic_len)) {
+            ERR_raise(ERR_LIB_EVP, ERR_R_INTERNAL_ERROR);
+            goto out;
+        }
+        if (!get_raw_public_key(pqc_key, &pqc_raw, &pqc_len)) {
+            ERR_raise(ERR_LIB_EVP, ERR_R_INTERNAL_ERROR);
+            goto out;
+        }
+    }
+    else {
+        if (!get_raw_private_key(classic_key, &classic_raw, &classic_len)) {
+            ERR_raise(ERR_LIB_EVP, ERR_R_INTERNAL_ERROR);
+            goto out;
+        }
+        if (!get_raw_private_key(pqc_key, &pqc_raw, &pqc_len)) {
+            ERR_raise(ERR_LIB_EVP, ERR_R_INTERNAL_ERROR);
+            goto out;
+        }
+    }
+
+    /* Combine the public keys */
+    hybrid_len = classic_len + pqc_len + sizeof(uint32_t);
+    hybrid_raw = OPENSSL_malloc(hybrid_len);
+    if (hybrid_raw == NULL) {
+        ERR_raise(ERR_LIB_EVP, ERR_R_MALLOC_FAILURE);
+        goto out;
+    }
+
+    hybrid_raw[0] = (classic_len >> 24) & 0xff;
+    hybrid_raw[1] = (classic_len >> 16) & 0xff;
+    hybrid_raw[2] = (classic_len >> 8) & 0xff;
+    hybrid_raw[3] = classic_len & 0xff;
+    memcpy(hybrid_raw + sizeof(uint32_t), classic_raw, classic_len);
+    memcpy(hybrid_raw + classic_len + sizeof(uint32_t), pqc_raw, pqc_len);
+
+    /* Create the hybrid key from the combined raw public key */
+    hybrid_ctx = EVP_PKEY_CTX_new_from_name(NULL, hybrid_name, NULL);
+    if (hybrid_ctx == NULL) {
+        ERR_raise(ERR_LIB_EVP, ERR_R_INTERNAL_ERROR);
+        goto out;
+    }
+    if (EVP_PKEY_fromdata_init(hybrid_ctx) <= 0) {
+        ERR_raise(ERR_LIB_EVP, ERR_R_INTERNAL_ERROR);
+        goto out;
+    }
+
+    if (pub_keys) {
+        params[0] = OSSL_PARAM_construct_octet_string(OSSL_PKEY_PARAM_PUB_KEY, hybrid_raw, hybrid_len);
+        params[1] = OSSL_PARAM_construct_end();
+
+        if (EVP_PKEY_fromdata(hybrid_ctx, hybrid_key, EVP_PKEY_PUBLIC_KEY, params) <= 0) {
+            ERR_raise(ERR_LIB_EVP, ERR_R_INTERNAL_ERROR);
+            goto out;
+        }
+    }
+    else {
+        params[0] = OSSL_PARAM_construct_octet_string(OSSL_PKEY_PARAM_PRIV_KEY, hybrid_raw, hybrid_len);
+        params[1] = OSSL_PARAM_construct_end();
+
+        if (EVP_PKEY_fromdata(hybrid_ctx, hybrid_key, EVP_PKEY_PRIVATE_KEY, params) <= 0) {
+            ERR_raise(ERR_LIB_EVP, ERR_R_INTERNAL_ERROR);
+            goto out;
+        }
+    }
+
+    ret = 1;
+
+out:
+    if (classic_raw != NULL) {
+        OPENSSL_free(classic_raw);
+    }
+    if (pqc_raw != NULL) {
+        OPENSSL_free(pqc_raw);
+    }
+    if (hybrid_raw != NULL) {
+        OPENSSL_free(hybrid_raw);
+    }
+    if (hybrid_ctx != NULL) {
+        EVP_PKEY_CTX_free(hybrid_ctx);
+    }
+
+    return ret;
+}
+
+int EVP_PKEY_combine_public_keys(EVP_PKEY **hybrid_key, const EVP_PKEY *key, const EVP_PKEY *alt_key)
+{
+    return combine_keys(hybrid_key, key, alt_key, 1);
+}
+
+int EVP_PKEY_combine_private_keys(EVP_PKEY **hybrid_key, const EVP_PKEY *key, const EVP_PKEY *alt_key)
+{
+    return combine_keys(hybrid_key, key, alt_key, 0);
+}

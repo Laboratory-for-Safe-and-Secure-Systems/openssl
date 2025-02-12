@@ -131,8 +131,11 @@ const X509V3_EXT_METHOD ossl_v3_alt_sig_val = {
 
 //----------------------------------------------------
 
-typedef X509_CINF X509_CINF_PRETBS;
-ASN1_SEQUENCE_enc(X509_CINF_PRETBS, enc, 0) = {
+static const ASN1_AUX X509_CINF_PRETBS_aux = {
+    ((void*)0), 2, 0, 0, 0, __builtin_offsetof(X509_CINF, enc), ((void*)0)
+};
+
+static const ASN1_TEMPLATE X509_CINF_PRETBS_seq_tt[] = {
     ASN1_EXP_OPT(X509_CINF, version, ASN1_INTEGER, 0),
     ASN1_EMBED(X509_CINF, serialNumber, ASN1_INTEGER),
     ASN1_OPT(X509_CINF, signature, X509_ALGOR),  // Changed from ASN1_SIMPLE to ASN1_OPT
@@ -195,13 +198,11 @@ static X509_CINF *create_preTBS_X509(X509 *orig_cert)
         if (!X509v3_add_ext(&preTbs->extensions, pubkey_ext, -1)) {
             goto out;
         }
-        pubkey_ext = NULL;
     }
     if (alg_ext) {
         if (!X509v3_add_ext(&preTbs->extensions, alg_ext, -1)) {
             goto out;
         }
-        alg_ext = NULL;
     }
 
     /* Properly reset the X509_ALGOR so it is not encoded */
